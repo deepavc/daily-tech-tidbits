@@ -8,7 +8,7 @@ from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload
 
 FOLDER_NAME = "Daily Tech Tidbits"
-MODELS = [os.getenv("GEMINI_MODEL", "gemini-2.5-flash"), "gemini-2.5-flash-lite"]
+MODELS = [os.getenv("GEMINI_MODEL", "gemini-3.8-flash"), "gemini-3.5-flash-lite"]
 PROFILE = ("Beginner-level AI learner who is currently an application developer, "
            "aiming to become an AI developer (LLM apps, RAG, ML/DL, agents, open-source POCs) "
            "and preparing for AI/GenAI developer interviews.")  # <- edit to match your chat
@@ -24,6 +24,21 @@ FEEDS = {
     "The Verge AI": "https://www.theverge.com/rss/ai-artificial-intelligence/index.xml",
 }
 HN_QUERIES = ["LLM", "RAG retrieval", "AI agent", "machine learning", "open source AI model"]
+
+
+def discover(key):
+    """Ask the API which flash models are available to this key (newest first)."""
+    try:
+        r = requests.get("https://generativelanguage.googleapis.com/v1beta/models",
+                         headers={"x-goog-api-key": key}, params={"pageSize": 200}, timeout=30).json()
+        names = [m["name"].split("/")[-1] for m in r.get("models", [])
+                 if "generateContent" in m.get("supportedGenerationMethods", [])
+                 and "flash" in m["name"]
+                 and not any(x in m["name"] for x in ("image", "tts", "audio", "live", "robotics", "computer"))]
+        return sorted(names, reverse=True)
+    except Exception as ex:
+        print("model discovery failed", ex)
+        return []
 
 def clip(s, n=280):
     return " ".join((s or "").replace("\n", " ").split())[:n]
@@ -99,7 +114,7 @@ ITEMS:
 
 def gemini(prompt):
     key = os.environ["GEMINI_API_KEY"]
-    for model in MODELS:
+    for model in dict.fromkeys(MODELS + discover(key)):
         for attempt in range(4):
             r = requests.post(
                 f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
